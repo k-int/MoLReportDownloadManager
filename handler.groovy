@@ -12,7 +12,7 @@
 import javax.mail.*
 import javax.mail.search.*
 import java.util.Properties
-import groovy.json.JsonOutput.*
+import static groovy.json.JsonOutput.*
 import groovy.json.JsonSlurper
  
 println "Hello";
@@ -34,6 +34,14 @@ cfg_file << toJson(config);
 
 System.exit(0);
 
+def getReport(url) {
+  def result = false;
+
+  println("Get URL ${url}");
+
+  result
+}
+
 def pullLatest(config) {
   Properties props = new Properties()
   props.setProperty("mail.store.protocol", config.email.protocol)
@@ -43,8 +51,8 @@ def pullLatest(config) {
   // props.setProperty("mail.transport.protocol", config.email.transport)
   // props.setProperty("mail.smtp.auth", "true");
   props.setProperty("mail.smtp.starttls.enable", "true");
-  props.setProperty("mail.debug", "true");
-  props.setProperty("mail.smtp.debug", "true");
+  // props.setProperty("mail.debug", "true");
+  // props.setProperty("mail.smtp.debug", "true");
   props.setProperty("mail.imap.ssl.enable", "true");
   def session = Session.getDefaultInstance(props, null)
   def store = session.getStore("imaps")
@@ -57,35 +65,38 @@ def pullLatest(config) {
     if(!folder.isOpen())
       folder.open(Folder.READ_WRITE);
 
-    Message[] messages = folder.getMessages();
-    System.out.println("No of Messages : " + folder.getMessageCount());
-    System.out.println("No of Unread Messages : " + folder.getUnreadMessageCount());
-    System.out.println(messages.length);
-    for (int i=0; i < messages.length;i++) {
-      System.out.println("*****************************************************************************");
-      System.out.println("MESSAGE " + (i + 1) + ":");
-      Message msg =  messages[i];
-      //System.out.println(msg.getMessageNumber());
-      //Object String;
-      //System.out.println(folder.getUID(msg)
+    // Find all messages not deleted and containing the subject line text report collection test
+    def messages = folder.search( 
+      new AndTerm(
+        new SubjectTerm("report collection test"),
+        new FlagTerm(new Flags(Flags.Flag.DELETED), false)));
 
-      subject = msg.getSubject();
+    messages.each { msg ->
+      // println("${msg.subject} ${msg.sender}")
+      // println("${msg.inputStream.text}"); 
+      if ( msg.content instanceof javax.mail.Multipart ) {
+        // println("Message contains: ${msg.content.count} parts"); 
+        // println("Content: ${msg.content}"); 
+        // Get multipart 0 -- should be the text version
+        def body_part_zero = msg.content.getBodyPart(0);
+        // println("Part 0 : ${body_part_zero.inputStream.text}");
+        def matcher = body_part_zero.inputStream.text =~ /<https:.*CollectReport\.aspx.*csv>/
 
-      System.out.println("Subject: " + subject);
-      System.out.println("From: " + msg.getFrom()[0]);
-      System.out.println("To: "+msg.getAllRecipients()[0]);
-      System.out.println("Date: "+msg.getReceivedDate());
-      System.out.println("Size: "+msg.getSize());
-      System.out.println(msg.getFlags());
-      System.out.println("Body: \n"+ msg.getContent());
-      System.out.println(msg.getContentType());
-    }
+        matcher.each { 
+          // println "Message contains URL : ${it}"
+          // Trim the < and > from the front and back of the string
+          def url = it.substring(1,it.length()-1)
 
-    // def messages = inbox.search( new FlagTerm(new Flags(Flags.Flag.DELETED), false))
-    // messages.each { msg ->
-    //   println("${msg.subject} ${msg.sender}")
+          // println("Url : \"${url}\"");
+          if ( getReport(url) ) {
+            println("GetReport completed successfully, call msg.setFlag(Flags.Flag.SEEN, true)");
+          }
+        }
+      }
+      else {
+      }
       // msg.setFlag(Flags.Flag.SEEN, true)
-    // }
+    }
   } finally {
     if(folder) {
       folder.close(true)
