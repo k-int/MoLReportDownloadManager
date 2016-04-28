@@ -1,9 +1,8 @@
 @Grapes([
   @GrabResolver(name='mvnRepository', root='http://central.maven.org/maven2/'),
   @Grab(group='net.sourceforge.nekohtml', module='nekohtml', version='1.9.14'),
-  @Grab(group='org.apache.httpcomponents', module='httpclient', version='4.5.1'),
-  @Grab(group='org.codehaus.groovy.modules.http-builder', module='http-builder', version='0.5.1'),
   @Grab(group='javax.mail', module='mail', version='1.4.7'),
+  @Grab(group='net.sourceforge.htmlunit', module='htmlunit', version='2.21'),
   @GrabExclude('org.codehaus.groovy:groovy-all')
 ])
 
@@ -14,7 +13,9 @@ import javax.mail.search.*
 import java.util.Properties
 import static groovy.json.JsonOutput.*
 import groovy.json.JsonSlurper
- 
+
+import com.gargoylesoftware.htmlunit.*
+
 println "Hello";
 
 config = null;
@@ -28,17 +29,47 @@ println("Using config ${config}");
 println("Pulling latest messages");
 pullLatest(config)
 
-println("Updating config");
-
-cfg_file << toJson(config);
+// println("Updating config");
+// cfg_file << toJson(config);
 
 System.exit(0);
 
-def getReport(url) {
+def getReport(config, url) {
   def result = false;
 
   println("Get URL ${url}");
+  client = new WebClient()
+  client.getOptions().setThrowExceptionOnScriptError(false);
+  client.getOptions().setJavaScriptEnabled(true);
+  client.getOptions().setRedirectEnabled(true);
+  client.getOptions().setCssEnabled(false);
+  client.setAjaxController(new NicelyResynchronizingAjaxController());
+  client.getCookieManager().setCookiesEnabled(true);
+  client.waitForBackgroundJavaScript(4000);
 
+  // Added as HtmlUnit had problems with the JavaScript
+  // client.javaScriptEnabled = true
+  html = client.getPage(url);
+  // println html.anchors.collect{ it.hrefAttribute }.sort().unique().join('\n')
+
+  println("Getting form");
+  def form = html.getFormByName("form1");
+
+  println("Getting login btn and user/pass fields");
+  def login_button = html.getHtmlElementById('LoginControl_Login');
+  def usernameField = form.getInputByName('LoginControl$UserName');
+  def passwordField = form.getInputByName('LoginControl$Password');
+  
+  println("Set user/pass");
+  usernameField.setValueAttribute(config.crm.user);
+  passwordField.setValueAttribute(config.crm.pass);
+
+  println("Click login btn");
+  def dlfile = login_button.click();
+
+  println(dlfile.getWebResponse().getContentAsStream().text);
+
+  // println("Done :: ${dlfile.class.name} ${dlfile}");
   result
 }
 
@@ -88,7 +119,7 @@ def pullLatest(config) {
           def url = it.substring(1,it.length()-1)
 
           // println("Url : \"${url}\"");
-          if ( getReport(url) ) {
+          if ( getReport(config, url) ) {
             println("GetReport completed successfully, call msg.setFlag(Flags.Flag.SEEN, true)");
           }
         }
