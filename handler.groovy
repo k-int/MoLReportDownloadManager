@@ -26,36 +26,12 @@ if ( cfg_file.exists() ) {
 else
   println "cannot read config"
 
-
-//mailLogin(config, client)
 pullLatest(config, null)
 
 // println("Updating config");
 // cfg_file << toJson(config);
 
 System.exit(0);
-
-def mailLogin(config, client) {
-  //Establish connection to page & wait to load
-  //Get forms and login
-  html = client.getPage('https://system.spektrix.com/museumoflondon/client/');
-  def form = html.getFormByName("form1");
-
-  def login_button = html.getHtmlElementById('LoginControl_Login');
-  def usernameField = form.getInputByName('LoginControl$UserName');
-  def passwordField = form.getInputByName('LoginControl$Password');
-
-  //Enter details
-  usernameField.setValueAttribute(config.crm.user);
-  passwordField.setValueAttribute(config.crm.pass);
-  def test = login_button.click();
-  //Waiting for page to load
-  sleep(3000);
-  test.getWebResponse().getContentAsStream().text
-
-
-
-}
 
 def getReport(config, url, client) {
 
