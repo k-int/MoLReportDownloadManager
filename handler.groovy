@@ -1,79 +1,137 @@
 @Grapes([
-  @GrabResolver(name='mvnRepository', root='http://central.maven.org/maven2/'),
-  @Grab(group='net.sourceforge.nekohtml', module='nekohtml', version='1.9.14'),
-  @Grab(group='javax.mail', module='mail', version='1.4.7'),
-  @Grab(group='net.sourceforge.htmlunit', module='htmlunit', version='2.21'),
-  @GrabExclude('org.codehaus.groovy:groovy-all')
+        @GrabResolver(name='mvnRepository', root='http://central.maven.org/maven2/'),
+        @Grab(group='net.sourceforge.nekohtml', module='nekohtml', version='1.9.14'),
+        @Grab(group='javax.mail', module='mail', version='1.4.7'),
+        @Grab(group='net.sourceforge.htmlunit', module='htmlunit', version='2.21'),
+        @Grab(group='org.apache.httpcomponents', module='httpclient', version='4.5.2'),
+        @GrabExclude('org.codehaus.groovy:groovy-all')
 ])
 
 
 
 import javax.mail.*
 import javax.mail.search.*
-import java.util.Properties
-import static groovy.json.JsonOutput.*
+import java.text.SimpleDateFormat
 import groovy.json.JsonSlurper
 
 import com.gargoylesoftware.htmlunit.*
 
-println "Hello";
 
 config = null;
 cfg_file = new File('./handler-cfg.json')
 if ( cfg_file.exists() ) {
   config = new JsonSlurper().parseText(cfg_file.text);
+  println "Config Loaded"
 }
+else
+  println "cannot read config"
 
-println("Using config ${config}");
 
-println("Pulling latest messages");
-pullLatest(config)
+//mailLogin(config, client)
+pullLatest(config, null)
 
 // println("Updating config");
 // cfg_file << toJson(config);
 
 System.exit(0);
 
-def getReport(config, url) {
-  def result = false;
-
-  println("Get URL ${url}");
-  client = new WebClient()
-  client.getOptions().setThrowExceptionOnScriptError(false);
-  client.getOptions().setJavaScriptEnabled(true);
-  client.getOptions().setRedirectEnabled(true);
-  client.getOptions().setCssEnabled(false);
-  client.setAjaxController(new NicelyResynchronizingAjaxController());
-  client.getCookieManager().setCookiesEnabled(true);
-  client.waitForBackgroundJavaScript(4000);
-
-  // Added as HtmlUnit had problems with the JavaScript
-  // client.javaScriptEnabled = true
-  html = client.getPage(url);
-  // println html.anchors.collect{ it.hrefAttribute }.sort().unique().join('\n')
-
-  println("Getting form");
+def mailLogin(config, client) {
+  //Establish connection to page & wait to load
+  //Get forms and login
+  html = client.getPage('https://system.spektrix.com/museumoflondon/client/');
   def form = html.getFormByName("form1");
 
-  println("Getting login btn and user/pass fields");
   def login_button = html.getHtmlElementById('LoginControl_Login');
   def usernameField = form.getInputByName('LoginControl$UserName');
   def passwordField = form.getInputByName('LoginControl$Password');
-  
-  println("Set user/pass");
+
+  //Enter details
+  usernameField.setValueAttribute(config.crm.user);
+  passwordField.setValueAttribute(config.crm.pass);
+  def test = login_button.click();
+  //Waiting for page to load
+  sleep(3000);
+  test.getWebResponse().getContentAsStream().text
+
+
+
+}
+
+def getReport(config, url, client) {
+
+  def result = false;
+    client = new WebClient();
+    client.getOptions().setTimeout(12500000)
+    client.getOptions().setMaxInMemory(1250000000)
+    client.getOptions().setThrowExceptionOnScriptError(false);
+    client.getOptions().setJavaScriptEnabled(true);
+    client.getOptions().setRedirectEnabled(true);
+    client.getOptions().setCssEnabled(false);
+    client.setAjaxController(new NicelyResynchronizingAjaxController());
+    client.getCookieManager().setCookiesEnabled(true);
+    client.waitForBackgroundJavaScript(12500000);
+
+  // Added as HtmlUnit had problems with the JavaScript
+
+  html = client.getPage(url);
+//    println html.anchors.collect{ it.hrefAttribute }.sort().unique().join('\n')
+
+  def form = html.getFormByName("form1");
+
+  def login_button = html.getHtmlElementById('LoginControl_Login');
+  def usernameField = form.getInputByName('LoginControl$UserName');
+  def passwordField = form.getInputByName('LoginControl$Password');
+
   usernameField.setValueAttribute(config.crm.user);
   passwordField.setValueAttribute(config.crm.pass);
 
-  println("Click login btn");
-  def dlfile = login_button.click();
+      def dlfile = login_button.click();
 
-  println(dlfile.getWebResponse().getContentAsStream().text);
+  def s = dlfile.getWebResponse().getContentAsStream().text
+    if(s) {
+        result = true
+        int count = 0;
+        def str = url.split("ClientFileName=")[1]
+        String dates = config.properties.add_dates_to_filenames
+		 def sdf1 = new SimpleDateFormat("dd_MM_yyyy HH_mm")
+        if(dates.equalsIgnoreCase("true")){
+			def str_arr = str.split("[.]")
+            str = str_arr[0]+sdf1.format(new Date())+"."+str_arr[1]
+			}
+        def file = new File(str)
+        String over = config.properties.overwrite_files
+        String outputPath = config.properties.output_path
+        if(outputPath.contains('''$date''')) {
+            def date = new Date()
+            def sdf = new SimpleDateFormat("dd-MM-yyyy")
+            outputPath = outputPath.replace('''$date''', sdf.format(date))
+        }
+        if (System.properties['os.name'].toLowerCase().contains('windows')) {
+            if(!outputPath.endsWith("\\"))
+                outputPath = outputPath + "\\"
+        } else {
+            if(!outputPath.endsWith("/"))
+                outputPath = outputPath + "/"
+        }
+        new File(outputPath).mkdirs()
 
-  // println("Done :: ${dlfile.class.name} ${dlfile}");
+        if(over.equalsIgnoreCase("false"))
+            while(file.exists()){
+                def str_arr = str.split("[.]")
+                file = new File(outputPath+str_arr[0]+"("+ count++ +")."+str_arr[1])
+            }
+        else
+            file = new File(outputPath+str)
+        file.createNewFile()
+        file << s
+    }
+
+
+//   println("Done :: ${dlfile.class.name} ${dlfile}");
   result
 }
 
-def pullLatest(config) {
+def pullLatest(config, client) {
   Properties props = new Properties()
   props.setProperty("mail.store.protocol", config.email.protocol)
   props.setProperty("mail.imap.host", config.email.host)
@@ -88,8 +146,10 @@ def pullLatest(config) {
   def session = Session.getDefaultInstance(props, null)
   def store = session.getStore("imaps")
   def folder
-   
-  try {
+  String subject = config.properties.email_subjectline
+
+
+    try {
     store.connect(config.email.host, config.email.user, config.email.pass)
     folder = store.getFolder("inbox")
 
@@ -97,11 +157,12 @@ def pullLatest(config) {
       folder.open(Folder.READ_WRITE);
 
     // Find all messages not deleted and containing the subject line text report collection test
-    def messages = folder.search( 
-      new AndTerm(
-        new SubjectTerm("report collection test"),
-        new FlagTerm(new Flags(Flags.Flag.DELETED), false)));
+    def messages = folder.search(
+            new AndTerm(
+                    new SubjectTerm(subject),
+                    new FlagTerm(new Flags(Flags.Flag.DELETED), false)));
 
+      boolean first =  true
     messages.each { msg ->
       // println("${msg.subject} ${msg.sender}")
       // println("${msg.inputStream.text}"); 
@@ -113,14 +174,17 @@ def pullLatest(config) {
         // println("Part 0 : ${body_part_zero.inputStream.text}");
         def matcher = body_part_zero.inputStream.text =~ /<https:.*CollectReport\.aspx.*csv>/
 
-        matcher.each { 
+        matcher.each {
           // println "Message contains URL : ${it}"
           // Trim the < and > from the front and back of the string
           def url = it.substring(1,it.length()-1)
 
           // println("Url : \"${url}\"");
-          if ( getReport(config, url) ) {
-            println("GetReport completed successfully, call msg.setFlag(Flags.Flag.SEEN, true)");
+          if ( getReport(config, url, client) ) {
+            println("GetReport completed successfully");
+            String delete = config.properties.delete_read_emails
+            if(delete.equalsIgnoreCase("true"))
+                msg.setFlag(Flags.Flag.DELETED,true)
           }
         }
       }

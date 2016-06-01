@@ -1,0 +1,23 @@
+{
+ "crm":{
+    "user": "USER",
+    "pass": "PASSWORD"
+  },
+  "email":{
+    "protocol": "imap",
+    "port": "993",
+    "host": "imap.gmail.com",
+    "user": "EMAIL",
+    "pass": "PASSWORD",
+    "transport": "ssl"
+  },
+  "properties":{
+    "output_path": "C:\\path\\to\\output\\$date\\",
+    "overwrite_files": "true",
+    "add_dates_to_filenames": "true",
+    "email_subjectline": "CRM",
+	"delete_read_emails": "true"
+  }
+}
+
+
